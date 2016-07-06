@@ -1,2 +1,3 @@
-# af-telegram-bot
-American Football bot for Telegram messager
+# American Football Bot
+
+American Football bot for Telegram messenger

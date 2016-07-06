@@ -1,0 +1,24 @@
+{
+  "name": "af-telegram-bot",
+  "version": "0.0.1",
+  "description": "American football bot for Telegram messager",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LogansUA/af-telegram-bot.git"
+  },
+  "keywords": [
+    "bot",
+    "telegram",
+    "american",
+    "football"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LogansUA/af-telegram-bot/issues"
+  },
+  "homepage": "https://github.com/LogansUA/af-telegram-bot#readme",
+  "devDependencies": {
+    "node-telegram-bot-api": "^0.23.3"
+  }
+}
