@@ -1,31 +1,27 @@
 'use strict';
-var http = require('http');
-let request = require('request');
-let TelegramBot = require('node-telegram-bot-api');
-let config = require('./src/config');
-let fs = require('fs');
-var multer  = require('multer');
+
+var TelegramBot = require('node-telegram-bot-api');
+var config = require('./src/config');
 var VK = require('vksdk');
 
 var vk = new VK({
-    'appId': config.vkId,
-    'appSecret': config.vkSecret,
-    'language': 'ru'
+    appId: config.vk.id,
+    appSecret: config.vk.secret,
+    language: config.vk.language
 });
 
-let options = {
+var bot = new TelegramBot(config.telegramBotToken, {
     polling: true
-};
+});
 
-let bot = new TelegramBot(config.telegramBotToken, options);
 bot.getMe().then(user => {
     console.log('Hello, my name is %s!', user.username);
 });
 
 bot.onText(/\/help/, function (msg) {
-    let chatId = msg.chat.id;
+    var chatId = msg.chat.id;
     bot.getMe().then(user => {
-        let message = `
+        var message = `
 Hello my name is ${user.first_name}.
         
 List of commands:
@@ -39,109 +35,74 @@ List of commands:
 });
 
 bot.onText(/\/search (.+)/, function (msg, match) {
-    let chatId = msg.chat.id;
-    bot.sendMessage(chatId, `You are looking for *${match[1]}*`, {
-        parse_mode: 'markdown'
-    });
-});
-
-bot.onText(/\/test (.+)/, function (msg, match) {
-    let chatId = msg.chat.id;
-    let userId = msg.from.id;
-    let photos = bot.getUserProfilePhotos(userId).then(function (data) {
-        let photoId = data['photos'][0][0]['file_id'];
-        bot.sendPhoto(chatId, photoId, {
-            caption: 'ava'
-        });
-    });
-});
-
-bot.onText(/\/vk_user (.+)/, function (msg, match) {
-    let chatId = msg.chat.id;
-    vk.setSecureRequests(false);
-    if (!Number.isInteger(parseInt(match[1]))) {
-        bot.sendMessage(chatId, 'Id must be integer');
-    } else {
-        vk.request('users.get', {
-            'user_id': match[1]
-        });
-        vk.on('done:users.get', function (_o) {
-            let name = _o['response'][0]['first_name'];
-            let last_name = _o['response'][0]['last_name'];
-            bot.sendMessage(chatId, 'This is ' + name + ' ' + last_name);
-        });
-    }
-});
-
-bot.onText(/\/vk_af_ua (.+)/, function (msg, match) {
     var chatId = msg.chat.id;
+
     vk.setSecureRequests(false);
-    if (!Number.isInteger(parseInt(match[1]))) {
-        bot.sendMessage(chatId, 'Value must be integer');
-    } else {
-        vk.request('wall.get', {
-            'domain': 'americanfootball_ua',
-            'offset': match[1],
-            'count': 1,
-            'filter': 'owner',
-            'extended': 1,
-        });
-        vk.on('done:wall.get', function (_o) {
-            let text = _o['response']['items'][0]['text'];
-            let likes = _o['response']['items'][0]['likes'];
-            let reposts = _o['response']['items'][0]['reposts'];
-            // console.log(_o['response']['items'][0]['copy_history']);
-            if (_o['response']['items'][0]['copy_history'] == undefined) {
-                let attachments = _o['response']['items'][0]['attachments'][0];
-                switchAttachments(attachments, chatId, text);
-            } else {
-                let attachments = _o['response']['items'][0]['copy_history'][0]['attachments'][0];
-                switchAttachments(attachments, chatId, text);
+
+    vk.request('wall.search', {
+        domain: 'americanfootball_ua',
+        offset: 0,
+        count: 1,
+        extended: 1,
+        query: match[1]
+    });
+    vk.on('done:wall.search', function (object) {
+        var vkItems = object.response.items;
+
+        if (vkItems != undefined && vkItems.length > 0) {
+            var items = [];
+
+            // Removing duplicates
+            for (var i = 0; i < vkItems.length; i++) {
+                var item = vkItems[i];
+
+                items[item.id] = item;
             }
-            // bot.sendMessage(chatId, 'This is ' + name + ' ' + last_name);
-        });
-    }
+
+            renderItems(items, chatId);
+        } else {
+            bot.sendMessage(chatId, `For query ${match[1]} nothing found!`);
+        }
+    });
 });
 
-var download = function (url, dest, cb) {
-    var file = fs.createWriteStream(dest);
-    var request = http.get(url, function (response) {
-        response.pipe(file);
-        file.on('finish', function () {
-            file.close(cb);  // close() is async, call cb after close completes.
-        });
-    }).on('error', function (err) { // Handle errors
-        fs.unlink(dest); // Delete the file async. (But we don't check the result)
-        if (cb) cb(err.message);
-    });
+var renderItems = function (items, chatId) {
+    var itemsLength = items.length;
+
+    for (var i = 0; i < itemsLength; i++) {
+        if (items[i] != undefined) {
+            if (items[i].copy_history == undefined) {
+                var item = items[i];
+            } else {
+                // Getting only one value
+                if (items[i].copy_history.length > 0) {
+                    item = items[i].copy_history.shift();
+                } else {
+                    item = items[i].copy_history;
+                }
+            }
+
+            if (item.attachments != undefined && item.attachments.length > 0) {
+                renderAttachments(item.attachments, chatId);
+
+                bot.sendMessage(chatId, item.text);
+            }
+        }
+    }
 };
 
-function switchAttachments(attachments, chatId, text) {
-    switch (attachments['type']) {
-        case 'photo' :
-            let photo = attachments['photo']['photo_604'];
+var renderAttachments = function (attachments, chatId) {
+    for (var i = 0; i < attachments.length; i++) {
+        var attachment = attachments[i];
 
-            download(photo, 'images/test.jpg');
-
-
-            //@TODO NEED TO UPLOAD PHOTO FROM INPUT FILE
-
-            bot.sendPhoto(chatId, '', {
-                caption: text
-            });
-
-            break;
-
-        case 'link' :
-            console.log('link');
-            break;
-
-        case 'video' :
-            console.log('video');
-            break;
-
-        default :
-            console.log(attachments);
-            break;
+        if (attachment.type == 'photo') {
+            bot.sendMessage(chatId, attachment.photo.photo_604);
+        }
+        if (attachment.type == 'link') {
+            bot.sendMessage(chatId, attachment.link.url);
+        }
+        if (attachment.type == 'video') {
+            bot.sendMessage(chatId, attachment.video.photo_800);
+        }
     }
-}
+};
